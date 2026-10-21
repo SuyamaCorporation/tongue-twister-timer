@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>早口言葉 タイムアタック</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen flex flex-col items-center py-8 px-4">
+  <header class="text-center mb-6">
+    <h1 class="text-3xl font-bold text-yellow-400">早口言葉 タイムアタック</h1>
+    <p class="text-gray-400 text-sm mt-1">Tongue Twister Speed Challenge</p>
+  </header>
+
+  <!-- Difficulty selector -->
+  <div class="flex gap-3 mb-6" role="group" aria-label="難易度選択">
+    <button id="btn-easy"   class="diff-btn px-4 py-2 rounded-lg font-semibold bg-green-700 text-white"  data-diff="初級">初級</button>
+    <button id="btn-medium" class="diff-btn px-4 py-2 rounded-lg font-semibold bg-yellow-700 text-white" data-diff="中級">中級</button>
+    <button id="btn-hard"   class="diff-btn px-4 py-2 rounded-lg font-semibold bg-red-700 text-white"    data-diff="上級">上級</button>
+  </div>
+
+  <!-- Main card -->
+  <div class="w-full max-w-2xl bg-gray-800 rounded-2xl shadow-xl p-8 mb-6">
+    <div class="flex justify-between items-center mb-2">
+      <span id="diff-label" class="text-xs font-bold px-2 py-1 rounded bg-green-800 text-green-200">初級</span>
+      <span id="idx-label"  class="text-xs text-gray-400">1 / 5</span>
+    </div>
+
+    <!-- Twister display -->
+    <div id="twister-display"
+         class="text-4xl font-bold text-center text-white leading-relaxed tracking-widest my-8 select-none"
+         aria-live="polite">
+      生麦生米生卵
+    </div>
+
+    <!-- Timer -->
+    <div class="text-center mb-6">
+      <span id="timer-display" class="text-6xl font-mono font-bold text-cyan-400">0.000</span>
+      <span class="text-gray-400 text-lg ml-1">秒</span>
+    </div>
+
+    <!-- Best record -->
+    <div class="text-center mb-6 h-6">
+      <span id="best-label" class="text-sm text-yellow-300"></span>
+    </div>
+
+    <!-- Controls -->
+    <div class="flex justify-center gap-4">
+      <button id="btn-start"    class="px-6 py-3 bg-cyan-600 hover:bg-cyan-500 rounded-xl font-bold text-lg transition">スタート</button>
+      <button id="btn-complete" class="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold text-lg transition opacity-50 cursor-not-allowed" disabled>完了</button>
+    </div>
+
+    <!-- Navigation -->
+    <div class="flex justify-between mt-6">
+      <button id="btn-prev" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition" aria-label="前の早口言葉">← 前へ</button>
+      <button id="btn-next" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition" aria-label="次の早口言葉">次へ →</button>
+    </div>
+  </div>
+
+  <!-- Leaderboard -->
+  <div class="w-full max-w-2xl bg-gray-800 rounded-2xl shadow-xl p-6">
+    <h2 class="text-xl font-bold text-yellow-400 mb-4">🏆 ベスト記録 一覧</h2>
+    <div id="leaderboard" class="space-y-2 text-sm"></div>
+  </div>
+
+  <script>
+  const TWISTERS = [
+    { text: '生麦生米生卵',               diff: '初級' },
+    { text: '東京特許許可局',             diff: '初級' },
+    { text: '赤巻紙青巻紙黄巻紙',         diff: '初級' },
+    { text: '隣の客はよく柿食う客だ',     diff: '初級' },
+    { text: '竹垣に竹立て掛けたのは竹立て掛けたかったから竹立て掛けた', diff: '初級' },
+    { text: '坊主が屏風に上手に坊主の絵を描いた', diff: '中級' },
+    { text: '骨粗鬆症予防に牛乳を飲もう', diff: '中級' },
+    { text: '新春シャンソンショー',       diff: '中級' },
+    { text: 'バスガス爆発',               diff: '中級' },
+    { text: '牛車が馬車に追いついた',     diff: '中級' },
+    { text: '青山さんも出た赤山さんも出た山崎さんもやっぱり出た', diff: '上級' },
+    { text: '東京特許許可局局長が東京特許を許可しなかった', diff: '上級' },
+    { text: '菊栗きくくり菊栗みくくり合わせて菊栗むくくり', diff: '上級' },
+    { text: 'あのあんまが身の上話ならあのあんまの身の上話を聞かせてみよ', diff: '上級' },
+    { text: '茶摘みは茶を摘まず茶摘みがちゃんと茶を摘んだ', diff: '上級' },
+  ];
+
+  const DIFF_COLORS = { '初級': 'bg-green-800 text-green-200', '中級': 'bg-yellow-800 text-yellow-200', '上級': 'bg-red-800 text-red-200' };
+
+  let currentDiff = '初級';
+  let filtered = [];
+  let currentIdx = 0;
+  let timerStart = null;
+  let timerRunning = false;
+  let rafId = null;
+  let records = JSON.parse(localStorage.getItem('twister-records') || '{}');
+
+  function getFiltered() {
+    return TWISTERS.filter(t => t.diff === currentDiff);
+  }
+
+  function saveRecords() {
+    localStorage.setItem('twister-records', JSON.stringify(records));
+  }
+
+  function formatTime(ms) {
+    return (ms / 1000).toFixed(3);
+  }
+
+  function updateTimerDisplay() {
+    if (!timerRunning) return;
+    const elapsed = performance.now() - timerStart;
+    document.getElementById('timer-display').textContent = formatTime(elapsed);
+    rafId = requestAnimationFrame(updateTimerDisplay);
+  }
+
+  function renderTwister() {
+    filtered = getFiltered();
+    if (filtered.length === 0) return;
+    if (currentIdx >= filtered.length) currentIdx = filtered.length - 1;
+    const t = filtered[currentIdx];
+
+    document.getElementById('twister-display').textContent = t.text;
+    document.getElementById('idx-label').textContent = `${currentIdx + 1} / ${filtered.length}`;
+    document.getElementById('diff-label').textContent = t.diff;
+    document.getElementById('diff-label').className = `text-xs font-bold px-2 py-1 rounded ${DIFF_COLORS[t.diff]}`;
+
+    const key = t.text;
+    if (records[key]) {
+      document.getElementById('best-label').textContent = `🥇 ベスト: ${formatTime(records[key])} 秒`;
+    } else {
+      document.getElementById('best-label').textContent = 'まだ記録なし';
+    }
+
+    stopTimer();
+    document.getElementById('timer-display').textContent = '0.000';
+    renderLeaderboard();
+  }
+
+  function startTimer() {
+    if (timerRunning) return;
+    timerRunning = true;
+    timerStart = performance.now();
+    document.getElementById('btn-complete').disabled = false;
+    document.getElementById('btn-complete').classList.remove('opacity-50', 'cursor-not-allowed');
+    document.getElementById('btn-start').textContent = '計測中…';
+    document.getElementById('btn-start').disabled = true;
+    document.getElementById('btn-start').classList.add('opacity-50', 'cursor-not-allowed');
+    rafId = requestAnimationFrame(updateTimerDisplay);
+  }
+
+  function stopTimer() {
+    timerRunning = false;
+    cancelAnimationFrame(rafId);
+    document.getElementById('btn-complete').disabled = true;
+    document.getElementById('btn-complete').classList.add('opacity-50', 'cursor-not-allowed');
+    document.getElementById('btn-start').textContent = 'スタート';
+    document.getElementById('btn-start').disabled = false;
+    document.getElementById('btn-start').classList.remove('opacity-50', 'cursor-not-allowed');
+  }
+
+  function completeAttempt() {
+    if (!timerRunning) return;
+    const elapsed = performance.now() - timerStart;
+    stopTimer();
+    document.getElementById('timer-display').textContent = formatTime(elapsed);
+
+    const key = filtered[currentIdx].text;
+    if (!records[key] || elapsed < records[key]) {
+      records[key] = elapsed;
+      saveRecords();
+      document.getElementById('best-label').textContent = `🥇 新記録！ ${formatTime(elapsed)} 秒`;
+    } else {
+      document.getElementById('best-label').textContent = `🥇 ベスト: ${formatTime(records[key])} 秒 (今回: ${formatTime(elapsed)} 秒)`;
+    }
+    renderLeaderboard();
+  }
+
+  function renderLeaderboard() {
+    const lb = document.getElementById('leaderboard');
+    const entries = TWISTERS
+      .filter(t => records[t.text])
+      .map(t => ({ text: t.text, diff: t.diff, ms: records[t.text] }))
+      .sort((a, b) => a.ms - b.ms);
+
+    if (entries.length === 0) {
+      lb.textContent = 'まだ記録がありません。';
+      return;
+    }
+
+    lb.innerHTML = '';
+    entries.forEach((e, i) => {
+      const row = document.createElement('div');
+      row.className = 'flex items-center justify-between bg-gray-700 rounded-lg px-4 py-2';
+      const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}.`;
+      const left = document.createElement('span');
+      left.textContent = `${medal} ${e.text}`;
+      const right = document.createElement('span');
+      right.className = 'text-cyan-400 font-mono font-bold ml-4 shrink-0';
+      right.textContent = `${formatTime(e.ms)} 秒`;
+      const badge = document.createElement('span');
+      badge.className = `text-xs px-2 py-0.5 rounded ml-2 ${DIFF_COLORS[e.diff]}`;
+      badge.textContent = e.diff;
+      row.appendChild(left);
+      const rightGroup = document.createElement('div');
+      rightGroup.className = 'flex items-center';
+      rightGroup.appendChild(badge);
+      rightGroup.appendChild(right);
+      row.appendChild(rightGroup);
+      lb.appendChild(row);
+    });
+  }
+
+  // Difficulty buttons
+  document.querySelectorAll('.diff-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentDiff = btn.dataset.diff;
+      currentIdx = 0;
+      document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('ring-2', 'ring-white'));
+      btn.classList.add('ring-2', 'ring-white');
+      renderTwister();
+    });
+  });
+
+  document.getElementById('btn-start').addEventListener('click', startTimer);
+  document.getElementById('btn-complete').addEventListener('click', completeAttempt);
+
+  document.getElementById('btn-prev').addEventListener('click', () => {
+    filtered = getFiltered();
+    currentIdx = (currentIdx - 1 + filtered.length) % filtered.length;
+    renderTwister();
+  });
+
+  document.getElementById('btn-next').addEventListener('click', () => {
+    filtered = getFiltered();
+    currentIdx = (currentIdx + 1) % filtered.length;
+    renderTwister();
+  });
+
+  // Keypress starts timer
+  document.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' && !timerRunning) {
+      e.preventDefault();
+      startTimer();
+    } else if (e.code === 'Enter' && timerRunning) {
+      e.preventDefault();
+      completeAttempt();
+    }
+  });
+
+  // Init
+  document.getElementById('btn-easy').classList.add('ring-2', 'ring-white');
+  renderTwister();
+  </script>
+</body>
+</html>
